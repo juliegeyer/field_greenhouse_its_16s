@@ -1,0 +1,388 @@
+#####################################    Chapter 1 Code    ########################################
+
+#load in required packages
+library(readr)
+library(dplyr)
+library(lmerTest)
+library(ggplot2)
+library(vegan)
+library(permute)
+library(qiime2R)
+library(effectsize)
+library(mvabund)
+library(tidyr)
+
+#read in data
+ch116sfield <- read_csv("metadata_nano_run_2.csv")
+ch1itsfield <- read_csv("ch1-its-field-metadata-r.csv")
+ch1itsgh <- read_csv("ch1-its-gp-r.csv")
+
+#change variables to factors or numeric
+ch116sfield$leafnumber <- as.factor(ch116sfield$leafnumber)
+ch116sfield$timepoint <- as.factor(ch116sfield$timepoint)
+ch116sfield$transect <- as.factor(ch116sfield$transect)
+ch116sfield$length <- as.numeric(ch116sfield$length)
+ch1itsfield$leafnumber <- as.factor(ch1itsfield$leafnumber)
+ch1itsfield$timepoint <- as.factor(ch1itsfield$timepoint)
+ch1itsfield$transect <- as.factor(ch1itsfield$transect)
+ch1itsfield$lengthcm <- as.numeric(ch1itsfield$lengthcm)
+ch1itsfield$plantid <- as.factor(ch1itsfield$plantid)
+
+#re-code timepoint and transect as a combined variable
+ch116s <- ch116sfield %>% mutate(timepoint.t = paste(timepoint, transect, sep = "_"))
+ch1its <- ch1itsfield %>% mutate(timepoint.t = paste(timepoint, transect, sep = "_"))
+
+#remove missing richness values
+ch116sfield.rich <- ch116s %>% filter(observed.features >0)
+
+#log transform richness
+ch116s$logobserved.features = log10(ch116sfield$observed.features)
+ch1its$logobserved.features = log10(ch1itsfield$observed.features)
+ch1itsghobs <- ch1itsgh %>% mutate(log_features = log10(observed.features))
+ch116sfield.rich$logobserved.features = log10(ch116sfield.rich$observed.features)
+
+#model for figure 2 
+me.mod2 <- lmer(shannon.entropy~leafnumber * lengthcm  + (1|timepoint.t) + (1|plantid), data=ch1its)
+summary(me.mod2)
+anova(me.mod2)
+(lsm = ls_means(me.mod2))
+ls_means(me.mod2, which = 'leafnumber', pairwise=TRUE)
+#effect size of leaf number
+F_to_eta2(19.2708, 2, 61.853)
+#effect size of leaf length
+F_to_eta2(9.6998, 1, 69.997)
+#effect size of leaf length*leaf number
+F_to_eta2(8.7068, 2, 65.337)
+
+#model for figure 3
+me.mod3 <- lmer(shannon.entropy ~ leafnumber * length + (1|timepoint.t) + (1|plantid), data=ch116sfield.rich)
+summary(me.mod3)
+anova(me.mod3)
+(lsm = ls_means(me.mod3))
+ls_means(me.mod3, which = 'leafnumber', pairwise=TRUE)
+
+#model for figure 4a
+set.seed(17)
+bray.its <-read_qza('bray_curtis_distance_matrix_f_ch1.qza')
+pcoaits.metadata <- read.csv("ch1-its-field-metadata-r.csv")
+b.matrix.its <-bray.its$data
+h <- how(plots = Plots(strata = pcoaits.metadata$plantid, type = "none"),
+         nperm = 499)
+adonis2(b.matrix.its ~ leafnumber + timepoint.t, data = ch1its, permutations = h)
+
+#betadisper test for model 4a
+dis <- vegdist(b.matrix.its, method="bray")
+mod <- betadisper(dis, ch1its$leafnumber)
+anova(mod)
+plot(mod)
+boxplot(mod)
+
+#model for figure 4b
+set.seed(17)
+bray.16s <-read_qza('bray_curtis_distance_matrix_b_ch1.qza')
+pcoa16s.metadata <- read.csv("metadata_nano_run_2.csv")
+b.matrix.16s <-bray.16s$data
+h <- how(plots = Plots(strata = pcoa16s.metadata$plantid, type = "none"),
+         nperm = 499)
+adonis2(b.matrix.16s ~ leafnumber + timepoint.t, data = ch116s, permutations = h)
+
+#betadisper test for model 4b
+dis <- vegdist(b.matrix.16s, method="bray")
+mod <- betadisper(dis, ch116s$leafnumber)
+anova(mod)
+plot(mod)
+boxplot(mod)
+
+#model for (fungi, greenhouse, PERMANOVA (Bray-Curtis), no corresponding figure)
+set.seed(17)
+ch1itsgh <-ch1itsgh %>% drop_na()
+bray.its <-read_qza('bray_curtis_distance_matrix_greenhouse.qza')
+pcoaits.metadata <- read.csv("ch1-its-gp-r.csv")
+b.matrix.its <-bray.its$data
+h <- how(plots = Plots(strata = pcoaits.metadata$block, type = "none"),
+         nperm = 499)
+adonis2(b.matrix.its ~ leaf.age + lengthcm + (1|block), data = ch1itsgh, permutations = h)
+
+#betadisper test, fungi, greenhouse
+dis <- vegdist(b.matrix.its, method="bray")
+mod <- betadisper(dis, ch1itsgh$leaf.age)
+anova(mod)
+plot(mod)
+boxplot(mod)
+
+#model for figure 6
+me.mod2 <- lmer(shannon.entropy ~ leaf.age + lengthcm + (1|block), data = ch1itsgh)
+summary(me.mod2) 
+anova(me.mod2)
+
+#RELATIVE ABUNDANCE OF FUNGAL GENERA (FIELD) 
+
+#read in data
+final.community.phy <- read.csv("ch1-its-genus-filtered.csv")
+
+#make tidy data frame
+tidy.final <-final.community.phy %>%
+  gather(Genus, abundance, 12:300) %>% 
+  group_by(Genus) %>% 
+  mutate(total= sum(abundance)) %>% 
+  ungroup()
+
+#gives list of total abundance across all samples for each genus
+list.abundance <-final.community.phy %>%
+  gather(Genus, abundance, 12:300) %>% 
+  group_by(Genus) %>% 
+  summarise(total= sum(abundance)) %>% 
+  arrange(desc(total)) 
+
+#gets list of 20 most abundant genera 
+list20.abundance <-final.community.phy %>%
+  gather(Genus, abundance, 12:300) %>% 
+  group_by(Genus) %>% 
+  summarise(total= sum(abundance)) %>% 
+  arrange(desc(total)) %>% 
+  slice_max(total, n = 20)
+
+#make a vector the top 20 genera to be selected
+genustop20 <-c(unique(list20.abundance$Genus))
+
+#subset data for the top 20 most abundant taxa
+tidy.final20 <-tidy.final %>% 
+  filter(Genus %in% genustop20) %>% 
+  select(-c(total))
+
+#new community matrix with the 20 most abundant fungal genera only 
+wide.final20 <- tidy.final20 %>% 
+  spread(Genus, abundance)
+
+#fit glm for figure 2.5
+species_list <- wide.final20 %>%
+  dplyr::select(12:31) %>%
+  select_if(colSums(.) != 0)
+species.data <- mvabund(species_list)
+is.mvabund(species.data)
+permID <- shuffleSet(n=nrow(wide.final20),
+                     nset=999,
+                     control=how(block=wide.final20$plantid))
+
+#multivariate test looking at changes in community composition of microbial genera (not reported)
+mod0 <- manyglm(species.data ~ as.factor(wide.final20$leafnumber),
+                family = "negative.binomial")
+sppcoef <- coef(mod0)
+coefplot(mod0)
+coefplot.manyglm(mod0, which.Xcoef=2:3)
+plot(mod0)
+anova(mod0)
+summary(mod0)
+
+#model for figure 2.5 (adjusted)
+mod.out <- anova(mod0,
+                 bootID=permID,
+                 p.uni = 'adjusted',
+                 test = 'LR')
+mod.out
+mod.out.posthoc <- anova(mod0,
+                         pairwise.comp = as.factor(wide.final20$leafnumber),
+                         bootID=permID,
+                         p.uni = 'adjusted',
+                         test = 'LR')
+mod.out.posthoc
+sp.univariate <- (mod.out$uni.p) %>% as.data.frame()
+
+#model for figure 2.5 - P-values for each genus (Adjusted)
+mod.out.posthoc$uni.test %>%
+  as.data.frame %>%
+  tibble::rownames_to_column("variable") %>%
+  pivot_longer(-variable,names_to = "species", values_to = "test") %>%
+  inner_join({
+    mod.out.posthoc$uni.p %>%
+      as.data.frame %>%
+      tibble::rownames_to_column("variable") %>%
+      pivot_longer(-variable,names_to = "species", values_to = "pval")}) %>%
+  dplyr::filter(!is.na(test))
+
+#RELATIVE ABUNDANCE OF BACTERIAL GENERA (FIELD)
+
+#read in data
+final.community.phy <- read.csv("ch1-16s-genus-filtered.csv")
+
+#make tidy dataframe
+tidy.final <-final.community.phy %>%
+  gather(Genus, abundance, 11:384) %>% 
+  group_by(Genus) %>% 
+  mutate(total= sum(abundance)) %>% 
+  ungroup()
+
+#gives list of total abundance across all samples for each genus
+list.abundance <-final.community.phy %>%
+  gather(Genus, abundance, 11:384) %>% 
+  group_by(Genus) %>% 
+  summarise(total= sum(abundance)) %>% 
+  arrange(desc(total)) 
+
+#gets list of 20 most abundant genera
+list20.abundance <-final.community.phy %>%
+  gather(Genus, abundance, 11:384) %>% 
+  group_by(Genus) %>% 
+  summarise(total= sum(abundance)) %>% 
+  arrange(desc(total)) %>% 
+  slice_max(total, n = 20)
+
+#make a vector with the top 20 genera to be selected
+genustop20 <-c(unique(list20.abundance$Genus))
+
+#subset data for the top 20 bacterial genera
+tidy.final20 <-tidy.final %>% 
+  filter(Genus %in% genustop20) %>% 
+  select(-c(total))
+
+#new community matrix with the 20 most abundant genera only 
+wide.final20 <- tidy.final20 %>% 
+  spread(Genus, abundance)
+
+#fit glm for figure 2.5
+species_list <- wide.final20 %>%
+  dplyr::select(11:30) %>%
+  select_if(colSums(.) != 0)
+species.data <- mvabund(species_list)
+is.mvabund(species.data)
+permID <- shuffleSet(n=nrow(wide.final20),
+                     nset=999,
+                     control=how(block=wide.final20$plantid))
+
+#multivariate test looking at changes in community composition of microbial genera (not reported)
+mod0 <- manyglm(species.data ~ as.factor(wide.final20$leafnumber),
+                family = "negative.binomial")
+sppcoef <- coef(mod0)
+coefplot(mod0)
+coefplot.manyglm(mod0, which.Xcoef=2:3)
+plot(mod0)
+anova(mod0)
+summary(mod0)
+set.seed(17)
+
+#model for figure 2.5 (adjusted)
+mod.out <- anova(mod0,
+                 bootID=permID,
+                 p.uni = 'adjusted',
+                 test = 'LR')
+mod.out
+mod.out.posthoc <- anova(mod0,
+                         pairwise.comp = as.factor(wide.final20$leafnumber),
+                         bootID=permID,
+                         p.uni = 'adjusted',
+                         test = 'LR')
+mod.out.posthoc
+sp.univariate <- (mod.out$uni.p) %>% as.data.frame()
+
+#model for figure 2.5 - P-values for each genus (adjusted)
+mod.out.posthoc$uni.test %>%
+  as.data.frame %>%
+  tibble::rownames_to_column("variable") %>%
+  pivot_longer(-variable,names_to = "species", values_to = "test") %>%
+  inner_join({
+    mod.out.posthoc$uni.p %>%
+      as.data.frame %>%
+      tibble::rownames_to_column("variable") %>%
+      pivot_longer(-variable,names_to = "species", values_to = "pval")}) %>%
+  dplyr::filter(!is.na(test))
+
+##RELATIVE ABUNDANCE OF FUNGAL GENERA (GREENHOUSE)
+
+#read in data
+final.community.phy <- read.csv("ch1-its-greenhouse-genus-filtered.csv")
+
+#make tidy data frame which is easier for formatting
+tidy.final <-final.community.phy %>%
+  gather(Genus, abundance, 9:88) %>% 
+  group_by(Genus) %>% 
+  mutate(total= sum(abundance)) %>% 
+  ungroup()
+
+#gives list of total abundance across all samples for each genus
+list.abundance <-final.community.phy %>%
+  gather(Genus, abundance, 9:88) %>% 
+  group_by(Genus) %>% 
+  summarise(total= sum(abundance)) %>% 
+  arrange(desc(total)) 
+
+#gets list of 20 most abundant fungal genera 
+list20.abundance <-final.community.phy %>%
+  gather(Genus, abundance, 9:88) %>% 
+  group_by(Genus) %>% 
+  summarise(total= sum(abundance)) %>% 
+  arrange(desc(total)) %>% 
+  slice_max(total, n = 20)
+
+#make a vector the top 20 genera to be selected
+genustop20 <-c(unique(list20.abundance$Genus))
+
+#subset data for the top 20 fungal genera
+tidy.final20 <-tidy.final %>% 
+  filter(Genus %in% genustop20) %>% 
+  select(-c(total))
+
+#new community matrix with the 20 most abundant fungal genera only 
+wide.final20 <- tidy.final20 %>% 
+  spread(Genus, abundance)
+
+#fit glm, for figure 2.6
+species_list <- wide.final20 %>%
+  dplyr::select(9:28) %>%
+  select_if(colSums(.) != 0)
+species.data <- mvabund(species_list)
+is.mvabund(species.data)
+
+#multivariate test looking at changes in community composition of microbial genera (not reported)
+mod0 <- manyglm(species.data ~ as.factor(wide.final20$timepoint),
+                family = "negative.binomial")
+sppcoef <- coef(mod0)
+coefplot.manyglm(mod0, which.Xcoef=2:3)
+plot(mod0)
+anova(mod0)
+summary(mod0)
+set.seed(17)
+
+#model for figure 2.6 (adjusted)
+mod.out <- anova(mod0,
+                 p.uni = 'adjusted',
+                 test = 'LR')
+mod.out
+mod.out.posthoc <- anova(mod0,
+                         pairwise.comp = as.factor(wide.final20$timepoint),
+                         p.uni = 'adjusted',
+                         test = 'LR')
+mod.out.posthoc
+sp.univariate <- (mod.out$uni.p) %>% as.data.frame()
+
+#model for figure 2.6 - P-values for each genus (adjusted)
+mod.out.posthoc$uni.test %>%
+  as.data.frame %>%
+  tibble::rownames_to_column("variable") %>%
+  pivot_longer(-variable,names_to = "species", values_to = "test") %>%
+  inner_join({
+    mod.out.posthoc$uni.p %>%
+      as.data.frame %>%
+      tibble::rownames_to_column("variable") %>%
+      pivot_longer(-variable,names_to = "species", values_to = "pval")}) %>%
+  dplyr::filter(!is.na(test))
+
+##Models for Supplementary Figures
+
+#model for supplemental figure 1
+me.mod2 <- lmer(logobserved.features ~ leafnumber * lengthcm + (1|timepoint.t) + (1|plantid), data=ch1its)
+summary(me.mod2)
+anova(me.mod2)
+(lsm = ls_means(me.mod2))
+ls_means(me.mod2, which = 'leafnumber', pairwise=TRUE)
+
+#model for supplemental figure 2
+me.mod2 <- lmer(logobserved.features ~ leafnumber + length + (1|timepoint.t) + (1|plantid), data=ch116s)
+summary(me.mod2)
+anova(me.mod2)
+(lsm = ls_means(me.mod2))
+ls_means(me.mod2, which = 'leafnumber', pairwise=TRUE)
+
+#model for supplemental figure 4
+me.mod2 <- lmer(log_features ~ leaf.age + lengthcm + (1|block), data = ch1itsghobs)
+summary (me.mod2)
+anova(me.mod2)
