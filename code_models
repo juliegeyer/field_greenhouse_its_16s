@@ -63,22 +63,6 @@ ls_means(me.mod3, which = 'leafnumber', pairwise=TRUE)
 
 #model for figure 4a
 set.seed(17)
-bray.its <-read_qza('bray_curtis_distance_matrix_f_ch1.qza')
-pcoaits.metadata <- read.csv("ch1-its-field-metadata-r.csv")
-b.matrix.its <-bray.its$data
-h <- how(plots = Plots(strata = pcoaits.metadata$plantid, type = "none"),
-         nperm = 499)
-adonis2(b.matrix.its ~ leafnumber + timepoint.t, data = ch1its, permutations = h)
-
-#betadisper test for model 4a
-dis <- vegdist(b.matrix.its, method="bray")
-mod <- betadisper(dis, ch1its$leafnumber)
-anova(mod)
-plot(mod)
-boxplot(mod)
-
-#model for figure 4b
-set.seed(17)
 bray.16s <-read_qza('bray_curtis_distance_matrix_b_ch1.qza')
 pcoa16s.metadata <- read.csv("metadata_nano_run_2.csv")
 b.matrix.16s <-bray.16s$data
@@ -86,9 +70,25 @@ h <- how(plots = Plots(strata = pcoa16s.metadata$plantid, type = "none"),
          nperm = 499)
 adonis2(b.matrix.16s ~ leafnumber + timepoint.t, data = ch116s, permutations = h)
 
-#betadisper test for model 4b
+#betadisper test for model 4a
 dis <- vegdist(b.matrix.16s, method="bray")
 mod <- betadisper(dis, ch116s$leafnumber)
+anova(mod)
+plot(mod)
+boxplot(mod)
+
+#model for figure 4b
+set.seed(17)
+bray.its <-read_qza('bray_curtis_distance_matrix_f_ch1.qza')
+pcoaits.metadata <- read.csv("ch1-its-field-metadata-r.csv")
+b.matrix.its <-bray.its$data
+h <- how(plots = Plots(strata = pcoaits.metadata$plantid, type = "none"),
+         nperm = 499)
+adonis2(b.matrix.its ~ leafnumber + timepoint.t, data = ch1its, permutations = h)
+
+#betadisper test for model 4b
+dis <- vegdist(b.matrix.its, method="bray")
+mod <- betadisper(dis, ch1its$leafnumber)
 anova(mod)
 plot(mod)
 boxplot(mod)
@@ -154,7 +154,7 @@ tidy.final20 <-tidy.final %>%
 wide.final20 <- tidy.final20 %>% 
   spread(Genus, abundance)
 
-#fit glm for figure 2.5
+#fit glm 
 species_list <- wide.final20 %>%
   dplyr::select(12:31) %>%
   select_if(colSums(.) != 0)
@@ -174,7 +174,7 @@ plot(mod0)
 anova(mod0)
 summary(mod0)
 
-#model for figure 2.5 (adjusted)
+#model for figure 5a (adjusted)
 mod.out <- anova(mod0,
                  bootID=permID,
                  p.uni = 'adjusted',
@@ -188,7 +188,7 @@ mod.out.posthoc <- anova(mod0,
 mod.out.posthoc
 sp.univariate <- (mod.out$uni.p) %>% as.data.frame()
 
-#model for figure 2.5 - P-values for each genus (Adjusted)
+#model for figure 5a - P-values for each genus (adjusted)
 mod.out.posthoc$uni.test %>%
   as.data.frame %>%
   tibble::rownames_to_column("variable") %>%
@@ -239,7 +239,7 @@ tidy.final20 <-tidy.final %>%
 wide.final20 <- tidy.final20 %>% 
   spread(Genus, abundance)
 
-#fit glm for figure 2.5
+#fit glm 
 species_list <- wide.final20 %>%
   dplyr::select(11:30) %>%
   select_if(colSums(.) != 0)
@@ -260,7 +260,7 @@ anova(mod0)
 summary(mod0)
 set.seed(17)
 
-#model for figure 2.5 (adjusted)
+#model for figure 5b (adjusted)
 mod.out <- anova(mod0,
                  bootID=permID,
                  p.uni = 'adjusted',
@@ -274,7 +274,7 @@ mod.out.posthoc <- anova(mod0,
 mod.out.posthoc
 sp.univariate <- (mod.out$uni.p) %>% as.data.frame()
 
-#model for figure 2.5 - P-values for each genus (adjusted)
+#model for figure 5b - P-values for each genus (adjusted)
 mod.out.posthoc$uni.test %>%
   as.data.frame %>%
   tibble::rownames_to_column("variable") %>%
@@ -325,7 +325,7 @@ tidy.final20 <-tidy.final %>%
 wide.final20 <- tidy.final20 %>% 
   spread(Genus, abundance)
 
-#fit glm, for figure 2.6
+#fit glm, for figure 7
 species_list <- wide.final20 %>%
   dplyr::select(9:28) %>%
   select_if(colSums(.) != 0)
@@ -342,7 +342,7 @@ anova(mod0)
 summary(mod0)
 set.seed(17)
 
-#model for figure 2.6 (adjusted)
+#model for figure 7 (adjusted)
 mod.out <- anova(mod0,
                  p.uni = 'adjusted',
                  test = 'LR')
@@ -354,7 +354,7 @@ mod.out.posthoc <- anova(mod0,
 mod.out.posthoc
 sp.univariate <- (mod.out$uni.p) %>% as.data.frame()
 
-#model for figure 2.6 - P-values for each genus (adjusted)
+#model for figure 7 - P-values for each genus (adjusted)
 mod.out.posthoc$uni.test %>%
   as.data.frame %>%
   tibble::rownames_to_column("variable") %>%
